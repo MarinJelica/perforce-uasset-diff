@@ -20,11 +20,12 @@ def execute_command_remote(command: str):
     remote_exec.open_command_connection(remote_exec.remote_nodes)
     remote_exec.run_command(f'unreal.SystemLibrary.execute_console_command(None, "{command}")', exec_mode=remote_execution.MODE_EXEC_STATEMENT)
     remote_exec.stop()
-
-if len(sys.argv) != 3:
+    
+args = [arg for arg in sys.argv if arg.strip()]
+if len(args) != 3:
     ctypes.windll.user32.MessageBoxW(0, u"Missing arguments, you need to launch the script like 'unreal_diff_uassets.py path1.uasset path2.uasset'", u"Error running .uasset diff", 0)
     exit()
 
-arg1 = sys.argv[1].replace("\\", "\\\\")
-arg2 = sys.argv[2].replace("\\", "\\\\")
+arg1 = args[1].replace("\\", "\\\\")
+arg2 = args[2].replace("\\", "\\\\")
 execute_command_remote(f"diff.uasset {arg1} {arg2}")
