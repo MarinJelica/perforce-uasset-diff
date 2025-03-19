@@ -2,9 +2,9 @@
 
 #include "ExposeDiffCommand.h"
 
+#include "Modules/ModuleManager.h"
 #include "AssetToolsModule.h"
 #include "DiffUtils.h"
-#include "Misc/PackagePath.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
 #include "HAL/IConsoleManager.h"
@@ -19,39 +19,30 @@ namespace ExposeDiffCommand
 	// Copied from DiffUtils::LoadAssetFromExternalPath()
 	static UObject* LoadAssetFromExternalPath(FString Path)
 	{
-		FPackagePath PackagePath;
-		if (!FPackagePath::TryFromPackageName(Path, PackagePath))
+		
+		// copy to the temp directory so it can be loaded properly
+		FString File = FPaths::GetBaseFilename(Path) + TEXT("-");
+		for (const ANSICHAR Char : "#(){}[].")
 		{
-			// copy to the temp directory so it can be loaded properly
-			FString File = FPaths::GetBaseFilename(Path) + TEXT("-");
-			for (const ANSICHAR Char : "#(){}[].")
-			{
-				File.ReplaceCharInline(Char, '-');
-			}
-
-			const FString Extension = TEXT(".") + FPaths::GetExtension(Path);
-			const FString SourcePath = Path;
-			FPlatformFileManager::Get().GetPlatformFile().CreateDirectory(*FPaths::DiffDir());
-			Path = FPaths::CreateTempFilename(*FPaths::DiffDir(), *File, *Extension);
-			Path = FPaths::ConvertRelativePathToFull(Path);
-
-			if (!FPlatformFileManager::Get().GetPlatformFile().CopyFile(*Path, *SourcePath))
-			{
-				UE_LOG(LogExec, Warning, TEXT("Failed to Copy %s"), *SourcePath);
-				return nullptr;
-			}
-
-			// load the temp package
-			PackagePath = FPackagePath::FromLocalPath(Path);
+			File.ReplaceCharInline(Char, '-');
 		}
 
-		if (PackagePath.IsEmpty())
+		const FString Extension = TEXT(".") + FPaths::GetExtension(Path);
+		const FString SourcePath = Path;
+		FPlatformFileManager::Get().GetPlatformFile().CreateDirectory(*FPaths::DiffDir());
+		Path = FPaths::CreateTempFilename(*FPaths::DiffDir(), *File, *Extension);
+		Path = FPaths::ConvertRelativePathToFull(Path);
+
+		if (!FPlatformFileManager::Get().GetPlatformFile().CopyFile(*Path, *SourcePath))
 		{
-			UE_LOG(LogExec, Warning, TEXT("Invalid Path: %s"), *Path);
+			UE_LOG(LogExec, Warning, TEXT("Failed to Copy %s"), *SourcePath);
 			return nullptr;
 		}
 
-		if (const UPackage* TempPackage = DiffUtils::LoadPackageForDiff(PackagePath, {}))
+		//const UPackage* TempPackage = LoadPackage(nullptr, *Path, LOAD_None);
+		const UPackage* TempPackage = LoadPackage(nullptr, *Path, LOAD_ForDiff | LOAD_DisableCompileOnLoad);
+		
+		if (TempPackage)
 		{
 			if (UObject* Object = TempPackage->FindAssetInPackage())
 			{
@@ -80,7 +71,8 @@ namespace ExposeDiffCommand
 				UObject* RHS = LoadAssetFromExternalPath(Args[1]);
 				if (LHS && RHS)
 				{
-					IAssetTools::Get().DiffAssets(LHS, RHS, {}, {});
+					IAssetTools& AssetTools = FModuleManager::GetModuleChecked<FAssetToolsModule>("AssetTools").Get();
+					AssetTools.DiffAssets(LHS, RHS, {}, {});
 				}
 			}),
 		ECVF_Default);
